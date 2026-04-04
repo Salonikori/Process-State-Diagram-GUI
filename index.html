@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OS Process State Diagram</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --bg2: #0f1526;
+    --bg3: #161d33;
+    --panel: #1a2240;
+    --border: rgba(100,140,255,0.15);
+    --border2: rgba(100,140,255,0.3);
+    --text: #e2e8ff;
+    --muted: #6b7db3;
+    --accent: #4f7fff;
+    --accent2: #7c5cfc;
+
+    --new-color: #3b82f6;
+    --new-bg: rgba(59,130,246,0.12);
+    --new-border: rgba(59,130,246,0.5);
+
+    --ready-color: #22c55e;
+    --ready-bg: rgba(34,197,94,0.12);
+    --ready-border: rgba(34,197,94,0.5);
+
+    --running-color: #f59e0b;
+    --running-bg: rgba(245,158,11,0.12);
+    --running-border: rgba(245,158,11,0.5);
+
+    --waiting-color: #a855f7;
+    --waiting-bg: rgba(168,85,247,0.12);
+    --waiting-border: rgba(168,85,247,0.5);
+
+    --terminated-color: #6b7280;
+    --terminated-bg: rgba(107,114,128,0.12);
+    --terminated-border: rgba(107,114,128,0.5);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(79,127,255,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, rgba(124,92,252,0.08) 0%, transparent 60%);
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 4px 14px;
+    margin-bottom: 12px;
+    background: rgba(79,127,255,0.06);
+  }
+
+  h1 {
+    font-size: clamp(20px, 4vw, 30px);
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+    background: linear-gradient(135deg, #e2e8ff 0%, #7c9fff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 6px;
+    font-weight: 300;
+  }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 16px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  @media (max-width: 860px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  .diagram-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .diagram-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(79,127,255,0.4), transparent);
+  }
+
+  svg#diagram { width: 100%; display: block; }
+
+  /* State node styles */
+  .state-node { cursor: pointer; transition: filter 0.2s; }
+  .state-node:hover { filter: brightness(1.2); }
+  .state-node.active .node-circle { filter: drop-shadow(0 0 12px var(--glow)); }
+  .state-node.active .node-ring { animation: ringPulse 1s ease-in-out infinite; }
+
+  @keyframes ringPulse {
+    0%,100% { opacity: 0.6; transform-origin: center; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.06); }
+  }
+
+  @keyframes arrowFlow {
+    to { stroke-dashoffset: -20; }
+  }
+
+  .flow-arrow { transition: stroke 0.3s, opacity 0.3s; }
+  .flow-arrow.active {
+    animation: arrowFlow 0.5s linear infinite;
+    stroke-dasharray: 6 4;
+    opacity: 1 !important;
+  }
+
+  /* Right panel */
+  .right-col { display: flex; flex-direction: column; gap: 12px; }
+
+  .panel-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  /* Current state display */
+  #current-state-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    transition: all 0.4s ease;
+  }
+
+  .state-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background 0.4s;
+  }
+
+  #state-name-big {
+    font-size: 18px;
+    font-weight: 600;
+    transition: color 0.4s;
+  }
+
+  #state-desc {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  /* Transition buttons */
+  .trans-btn {
+    width: 100%;
+    text-align: left;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 9px 12px;
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .trans-btn:hover { background: var(--panel); border-color: var(--border2); transform: translateX(2px); }
+  .trans-btn:active { transform: scale(0.98); }
+  .trans-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .trans-btn:disabled:hover { background: var(--bg3); border-color: var(--border); transform: none; }
+
+  .btn-arrow {
+    font-size: 14px;
+    width: 20px;
+    flex-shrink: 0;
+    text-align: center;
+  }
+
+  .btn-label { flex: 1; }
+  .btn-target {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.05);
+  }
+
+  /* Auto-sim button */
+  .auto-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border2);
+    background: rgba(79,127,255,0.08);
+    color: var(--accent);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .auto-btn:hover { background: rgba(79,127,255,0.15); }
+  .auto-btn.running { color: #f87171; border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.08); }
+
+  .reset-btn {
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 4px;
+  }
+  .reset-btn:hover { color: var(--text); border-color: var(--border2); }
+
+  /* Event log */
+  #event-log {
+    max-height: 180px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .log-entry {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--bg3);
+    border-left: 2px solid transparent;
+    animation: slideIn 0.25s ease;
+    line-height: 1.4;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .log-entry.success { border-left-color: var(--ready-color); }
+  .log-entry.info { border-left-color: var(--accent); }
+  .log-entry.error { border-left-color: #f87171; color: #f87171; }
+  .log-entry.warn { border-left-color: var(--waiting-color); }
+
+  .log-time { color: var(--muted); margin-right: 6px; }
+  .log-arrow { color: var(--running-color); }
+
+  /* Speed control */
+  .speed-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .speed-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+
+  /* Bottom info bar */
+  .info-bar {
+    margin-top: 16px;
+    width: 100%;
+    max-width: 1100px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  @media (max-width: 600px) {
+    .info-bar { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .info-chip {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: center;
+    transition: all 0.3s;
+    cursor: default;
+  }
+
+  .info-chip.highlight {
+    border-color: var(--chip-color);
+    background: var(--chip-bg);
+    box-shadow: 0 0 12px var(--chip-glow);
+  }
+
+  .chip-name {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .chip-desc {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+
+  footer {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  @keyframes wavePulse {
+    0%,100% { height: 4px; }
+    50% { height: 18px; }
+  }
+  .wave-bar.speaking {
+    background: var(--accent) !important;
+  }
+  .wave-bar.speaking:nth-child(1) { animation: wavePulse 0.5s ease-in-out infinite 0s; }
+  .wave-bar.speaking:nth-child(2) { animation: wavePulse 0.5s ease-in-out infinite 0.1s; }
+  .wave-bar.speaking:nth-child(3) { animation: wavePulse 0.5s ease-in-out infinite 0.2s; }
+  .wave-bar.speaking:nth-child(4) { animation: wavePulse 0.5s ease-in-out infinite 0.1s; }
+  .wave-bar.speaking:nth-child(5) { animation: wavePulse 0.5s ease-in-out infinite 0s; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="badge">Operating Systems — Mini Project</div>
+  <h1>Process State Diagram</h1>
+  <p class="subtitle">Interactive simulation of process lifecycle transitions</p>
+</header>
+
+<div class="main-grid">
+
+  <!-- Diagram -->
+  <div class="diagram-card">
+    <svg id="diagram" viewBox="0 0 660 400">
+      <defs>
+        <marker id="arrowhead" viewBox="0 0 10 10" refX="8" refY="5"
+          markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 2L8 5L2 8" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <!-- Glow filters -->
+        <filter id="glow-blue"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="glow-green"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="glow-amber"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="glow-purple"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="glow-gray"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+
+      <!-- === ARROWS === -->
+      <!-- New → Ready -->
+      <path id="arr-new-ready" class="flow-arrow" d="M155 130 Q200 92 225 116"
+        fill="none" stroke="rgba(100,140,255,0.4)" stroke-width="1.8" marker-end="url(#arrowhead)" opacity="0.7"/>
+      <!-- Ready → Running -->
+      <path id="arr-ready-running" class="flow-arrow" d="M330 120 Q365 104 390 116"
+        fill="none" stroke="rgba(100,140,255,0.4)" stroke-width="1.8" marker-end="url(#arrowhead)" opacity="0.7"/>
+      <!-- Running → Ready (preempt) -->
+      <path id="arr-running-ready" class="flow-arrow" d="M395 148 Q360 172 332 152"
+        fill="none" stroke="rgba(100,140,255,0.4)" stroke-width="1.8" marker-end="url(#arrowhead)" opacity="0.7"/>
+      <!-- Running → Waiting -->
+      <path id="arr-running-waiting" class="flow-arrow" d="M435 176 Q430 260 405 296"
+        fill="none" stroke="rgba(100,140,255,0.4)" stroke-width="1.8" marker-end="url(#arrowhead)" opacity="0.7"/>
+      <!-- Waiting → Ready -->
+      <path id="arr-waiting-ready" class="flow-arrow" d="M316 300 Q255 272 270 175"
+        fill="none" stroke="rgba(100,140,255,0.4)" stroke-width="1.8" marker-end="url(#arrowhead)" opacity="0.7"/>
+      <!-- Running → Terminated -->
+      <path id="arr-running-terminated" class="flow-arrow" d="M500 138 Q545 138 558 180"
+        fill="none" stroke="rgba(100,140,255,0.4)" stroke-width="1.8" marker-end="url(#arrowhead)" opacity="0.7"/>
+
+      <!-- === ARROW LABELS === -->
+      <text x="183" y="93" font-family="JetBrains Mono,monospace" font-size="10" fill="rgba(200,210,255,0.5)" text-anchor="middle">admitted</text>
+      <text x="362" y="99" font-family="JetBrains Mono,monospace" font-size="10" fill="rgba(200,210,255,0.5)" text-anchor="middle">dispatch</text>
+      <text x="362" y="178" font-family="JetBrains Mono,monospace" font-size="10" fill="rgba(200,210,255,0.5)" text-anchor="middle">preempt</text>
+      <text x="448" y="245" font-family="JetBrains Mono,monospace" font-size="10" fill="rgba(200,210,255,0.5)" text-anchor="middle">I/O wait</text>
+      <text x="252" y="252" font-family="JetBrains Mono,monospace" font-size="10" fill="rgba(200,210,255,0.5)" text-anchor="middle">I/O done</text>
+      <text x="548" y="163" font-family="JetBrains Mono,monospace" font-size="10" fill="rgba(200,210,255,0.5)" text-anchor="middle">exit</text>
+
+      <!-- === STATE NODES === -->
+
+      <!-- NEW -->
+      <g id="node-new" class="state-node" data-state="new" onclick="selectState('new')">
+        <circle class="node-ring" cx="92" cy="130" r="62" fill="none" stroke="#3b82f6" stroke-width="1" stroke-dasharray="4 3" opacity="0.3"/>
+        <circle class="node-circle" cx="92" cy="130" r="52" fill="rgba(59,130,246,0.1)" stroke="#3b82f6" stroke-width="1.5"/>
+        <text x="92" y="125" font-family="Space Grotesk,sans-serif" font-size="15" font-weight="600" fill="#60a5fa" text-anchor="middle">New</text>
+        <text x="92" y="143" font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(96,165,250,0.6)" text-anchor="middle">CREATED</text>
+      </g>
+
+      <!-- READY -->
+      <g id="node-ready" class="state-node" data-state="ready" onclick="selectState('ready')">
+        <circle class="node-ring" cx="280" cy="130" r="62" fill="none" stroke="#22c55e" stroke-width="1" stroke-dasharray="4 3" opacity="0.3"/>
+        <circle class="node-circle" cx="280" cy="130" r="52" fill="rgba(34,197,94,0.1)" stroke="#22c55e" stroke-width="1.5"/>
+        <text x="280" y="125" font-family="Space Grotesk,sans-serif" font-size="15" font-weight="600" fill="#4ade80" text-anchor="middle">Ready</text>
+        <text x="280" y="143" font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(74,222,128,0.6)" text-anchor="middle">QUEUE</text>
+      </g>
+
+      <!-- RUNNING -->
+      <g id="node-running" class="state-node" data-state="running" onclick="selectState('running')">
+        <circle class="node-ring" cx="450" cy="130" r="62" fill="none" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 3" opacity="0.3"/>
+        <circle class="node-circle" cx="450" cy="130" r="52" fill="rgba(245,158,11,0.1)" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="450" y="125" font-family="Space Grotesk,sans-serif" font-size="15" font-weight="600" fill="#fbbf24" text-anchor="middle">Running</text>
+        <text x="450" y="143" font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(251,191,36,0.6)" text-anchor="middle">ON CPU</text>
+      </g>
+
+      <!-- WAITING -->
+      <g id="node-waiting" class="state-node" data-state="waiting" onclick="selectState('waiting')">
+        <circle class="node-ring" cx="370" cy="330" r="62" fill="none" stroke="#a855f7" stroke-width="1" stroke-dasharray="4 3" opacity="0.3"/>
+        <circle class="node-circle" cx="370" cy="330" r="52" fill="rgba(168,85,247,0.1)" stroke="#a855f7" stroke-width="1.5"/>
+        <text x="370" y="325" font-family="Space Grotesk,sans-serif" font-size="15" font-weight="600" fill="#c084fc" text-anchor="middle">Waiting</text>
+        <text x="370" y="343" font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(192,132,252,0.6)" text-anchor="middle">BLOCKED</text>
+      </g>
+
+      <!-- TERMINATED -->
+      <g id="node-terminated" class="state-node" data-state="terminated" onclick="selectState('terminated')">
+        <circle class="node-ring" cx="590" cy="230" r="62" fill="none" stroke="#6b7280" stroke-width="1" stroke-dasharray="4 3" opacity="0.3"/>
+        <circle class="node-circle" cx="590" cy="230" r="52" fill="rgba(107,114,128,0.1)" stroke="#6b7280" stroke-width="1.5"/>
+        <text x="590" y="225" font-family="Space Grotesk,sans-serif" font-size="13" font-weight="600" fill="#9ca3af" text-anchor="middle">Terminated</text>
+        <text x="590" y="243" font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(156,163,175,0.6)" text-anchor="middle">DONE</text>
+      </g>
+    </svg>
+    <!-- Live caption -->
+    <div id="voice-caption" style="min-height:28px;margin-top:12px;padding:8px 12px;border-radius:8px;background:rgba(79,127,255,0.06);border:1px solid rgba(79,127,255,0.12);font-size:12px;color:var(--muted);font-style:italic;line-height:1.5;transition:opacity 0.3s;"></div>
+  </div>
+
+  <!-- Right Column -->
+  <div class="right-col">
+
+    <!-- Current State -->
+    <div class="panel-card">
+      <div class="panel-title">Current State</div>
+      <div id="current-state-display">
+        <div class="state-dot" id="state-dot" style="background:#3b82f6;box-shadow:0 0 8px #3b82f6"></div>
+        <div>
+          <div id="state-name-big" style="color:#60a5fa">New</div>
+          <div id="state-desc">Process just created by OS</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transitions -->
+    <div class="panel-card">
+      <div class="panel-title">Transitions</div>
+      <button class="trans-btn" id="btn-admit" onclick="doTransition('new','ready','admitted')">
+        <span class="btn-arrow">→</span>
+        <span class="btn-label">Admit</span>
+        <span class="btn-target" style="color:#4ade80">Ready</span>
+      </button>
+      <button class="trans-btn" id="btn-dispatch" onclick="doTransition('ready','running','dispatch')">
+        <span class="btn-arrow">→</span>
+        <span class="btn-label">Dispatch</span>
+        <span class="btn-target" style="color:#fbbf24">Running</span>
+      </button>
+      <button class="trans-btn" id="btn-preempt" onclick="doTransition('running','ready','preempt')">
+        <span class="btn-arrow">↩</span>
+        <span class="btn-label">Preempt</span>
+        <span class="btn-target" style="color:#4ade80">Ready</span>
+      </button>
+      <button class="trans-btn" id="btn-iowait" onclick="doTransition('running','waiting','I/O wait')">
+        <span class="btn-arrow">↓</span>
+        <span class="btn-label">I/O Wait</span>
+        <span class="btn-target" style="color:#c084fc">Waiting</span>
+      </button>
+      <button class="trans-btn" id="btn-iodone" onclick="doTransition('waiting','ready','I/O complete')">
+        <span class="btn-arrow">↑</span>
+        <span class="btn-label">I/O Complete</span>
+        <span class="btn-target" style="color:#4ade80">Ready</span>
+      </button>
+      <button class="trans-btn" id="btn-exit" onclick="doTransition('running','terminated','exit')">
+        <span class="btn-arrow">✕</span>
+        <span class="btn-label">Exit</span>
+        <span class="btn-target" style="color:#9ca3af">Terminated</span>
+      </button>
+    </div>
+
+    <!-- Auto Simulate -->
+    <div class="panel-card">
+      <div class="panel-title">Auto Simulate</div>
+      <button class="auto-btn" id="auto-btn" onclick="toggleAutoSim()">
+        <span id="auto-icon">▶</span>
+        <span id="auto-label">Start Simulation</span>
+      </button>
+      <div class="speed-row">
+        <span class="speed-label">Speed</span>
+        <input type="range" min="400" max="2000" value="1000" step="100" id="speed-slider" oninput="simSpeed = parseInt(this.value); document.getElementById('speed-val').textContent = (this.value/1000).toFixed(1)+'s'">
+        <span class="speed-label" id="speed-val">1.0s</span>
+      </div>
+      <button class="reset-btn" onclick="resetAll()">↺ Reset</button>
+    </div>
+
+    <!-- Voice Narration -->
+    <div class="panel-card">
+      <div class="panel-title">AI Voice Narration</div>
+      <div id="voice-status" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--bg3);border:1px solid var(--border);margin-bottom:10px;min-height:44px">
+        <div id="voice-wave" style="display:flex;align-items:center;gap:2px;flex-shrink:0">
+          <span class="wave-bar" style="width:3px;height:10px;background:var(--muted);border-radius:2px;transition:height 0.15s,background 0.3s"></span>
+          <span class="wave-bar" style="width:3px;height:10px;background:var(--muted);border-radius:2px;transition:height 0.15s,background 0.3s"></span>
+          <span class="wave-bar" style="width:3px;height:10px;background:var(--muted);border-radius:2px;transition:height 0.15s,background 0.3s"></span>
+          <span class="wave-bar" style="width:3px;height:10px;background:var(--muted);border-radius:2px;transition:height 0.15s,background 0.3s"></span>
+          <span class="wave-bar" style="width:3px;height:10px;background:var(--muted);border-radius:2px;transition:height 0.15s,background 0.3s"></span>
+        </div>
+        <span id="voice-text" style="font-size:11px;color:var(--muted);line-height:1.4">Voice ready. Enable to narrate.</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text)">
+          <div id="voice-toggle-wrap" onclick="toggleVoice()" style="width:36px;height:20px;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0">
+            <div id="voice-thumb" style="position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:transform 0.2s,background 0.2s"></div>
+          </div>
+          Enable Voice
+        </label>
+        <button onclick="stopVoice()" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">Stop</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:var(--muted);width:38px">Rate</span>
+          <input type="range" min="0.6" max="1.6" step="0.1" value="0.95" id="voice-rate" style="flex:1">
+          <span id="rate-val" style="font-size:11px;color:var(--muted);width:24px">0.95</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:var(--muted);width:38px">Pitch</span>
+          <input type="range" min="0.5" max="1.8" step="0.1" value="1.0" id="voice-pitch" style="flex:1">
+          <span id="pitch-val" style="font-size:11px;color:var(--muted);width:24px">1.0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="panel-card" style="flex:1">
+      <div class="panel-title">Event Log</div>
+      <div id="event-log"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- State Info Bar -->
+<div class="info-bar">
+  <div class="info-chip" id="chip-new" style="--chip-color:#3b82f6;--chip-bg:rgba(59,130,246,0.1);--chip-glow:rgba(59,130,246,0.3)">
+    <div class="chip-name" style="color:#60a5fa">New</div>
+    <div class="chip-desc">Process created, awaiting admission</div>
+  </div>
+  <div class="info-chip" id="chip-ready" style="--chip-color:#22c55e;--chip-bg:rgba(34,197,94,0.1);--chip-glow:rgba(34,197,94,0.3)">
+    <div class="chip-name" style="color:#4ade80">Ready</div>
+    <div class="chip-desc">In queue, waiting for CPU time</div>
+  </div>
+  <div class="info-chip" id="chip-running" style="--chip-color:#f59e0b;--chip-bg:rgba(245,158,11,0.1);--chip-glow:rgba(245,158,11,0.3)">
+    <div class="chip-name" style="color:#fbbf24">Running</div>
+    <div class="chip-desc">Executing instructions on CPU</div>
+  </div>
+  <div class="info-chip" id="chip-waiting" style="--chip-color:#a855f7;--chip-bg:rgba(168,85,247,0.1);--chip-glow:rgba(168,85,247,0.3)">
+    <div class="chip-name" style="color:#c084fc">Waiting</div>
+    <div class="chip-desc">Blocked, waiting for I/O event</div>
+  </div>
+  <div class="info-chip" id="chip-terminated" style="--chip-color:#6b7280;--chip-bg:rgba(107,114,128,0.1);--chip-glow:rgba(107,114,128,0.3)">
+    <div class="chip-name" style="color:#9ca3af">Terminated</div>
+    <div class="chip-desc">Process finished, resources freed</div>
+  </div>
+</div>
+
+<footer>OS Mini Project &nbsp;|&nbsp; Process State Diagram &nbsp;|&nbsp; Click states or use buttons to simulate</footer>
+
+<script>
+const stateInfo = {
+  new:        { color: '#60a5fa', dot: '#3b82f6', shadow: '#3b82f6', desc: 'Process just created by OS' },
+  ready:      { color: '#4ade80', dot: '#22c55e', shadow: '#22c55e', desc: 'In ready queue, waiting for CPU' },
+  running:    { color: '#fbbf24', dot: '#f59e0b', shadow: '#f59e0b', desc: 'Executing on CPU right now' },
+  waiting:    { color: '#c084fc', dot: '#a855f7', shadow: '#a855f7', desc: 'Blocked, waiting for I/O to complete' },
+  terminated: { color: '#9ca3af', dot: '#6b7280', shadow: '#6b7280', desc: 'Finished execution, releasing resources' }
+};
+
+const arrowMap = {
+  'new-ready':           'arr-new-ready',
+  'ready-running':       'arr-ready-running',
+  'running-ready':       'arr-running-ready',
+  'running-waiting':     'arr-running-waiting',
+  'waiting-ready':       'arr-waiting-ready',
+  'running-terminated':  'arr-running-terminated'
+};
+
+const validTransitions = {
+  new:        [['ready','admitted']],
+  ready:      [['running','dispatch']],
+  running:    [['ready','preempt'],['waiting','I/O wait'],['terminated','exit']],
+  waiting:    [['ready','I/O complete']],
+  terminated: []
+};
+
+const autoSimPaths = [
+  ['new','ready','admitted'],
+  ['ready','running','dispatch'],
+  ['running','waiting','I/O wait'],
+  ['waiting','ready','I/O complete'],
+  ['ready','running','dispatch'],
+  ['running','ready','preempt'],
+  ['ready','running','dispatch'],
+  ['running','terminated','exit']
+];
+
+let currentState = 'new';
+let autoSimRunning = false;
+let autoSimTimer = null;
+let autoSimStep = 0;
+let simSpeed = 1000;
+let logCount = 0;
+
+function now() {
+  const d = new Date();
+  return d.getHours().toString().padStart(2,'0') + ':' +
+         d.getMinutes().toString().padStart(2,'0') + ':' +
+         d.getSeconds().toString().padStart(2,'0');
+}
+
+function addLog(msg, type='info') {
+  const log = document.getElementById('event-log');
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  entry.innerHTML = `<span class="log-time">${now()}</span>${msg}`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+  logCount++;
+}
+
+function highlightState(state) {
+  document.querySelectorAll('.state-node').forEach(n => {
+    n.classList.remove('active');
+    const ring = n.querySelector('.node-ring');
+    const circle = n.querySelector('.node-circle');
+    ring.style.animation = '';
+    ring.style.opacity = '0.3';
+  });
+
+  const node = document.getElementById('node-' + state);
+  if (node) {
+    node.classList.add('active');
+    const ring = node.querySelector('.node-ring');
+    ring.style.animation = 'ringPulse 1s ease-in-out infinite';
+    ring.style.opacity = '1';
+  }
+
+  document.querySelectorAll('.info-chip').forEach(c => c.classList.remove('highlight'));
+  const chip = document.getElementById('chip-' + state);
+  if (chip) chip.classList.add('highlight');
+
+  const info = stateInfo[state];
+  document.getElementById('state-dot').style.background = info.dot;
+  document.getElementById('state-dot').style.boxShadow = `0 0 8px ${info.shadow}`;
+  document.getElementById('state-name-big').style.color = info.color;
+  document.getElementById('state-name-big').textContent = state.charAt(0).toUpperCase() + state.slice(1);
+  document.getElementById('state-desc').textContent = info.desc;
+}
+
+function animateArrow(key) {
+  const id = arrowMap[key];
+  if (!id) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('active');
+  el.style.stroke = '#f59e0b';
+  el.style.opacity = '1';
+  setTimeout(() => {
+    el.classList.remove('active');
+    el.style.stroke = '';
+    el.style.opacity = '0.7';
+  }, 900);
+}
+
+function doTransition(from, to, label) {
+  if (currentState !== from) {
+    addLog(`✗ Cannot "${label}" from <b>${currentState}</b>`, 'error');
+    return false;
+  }
+  animateArrow(from + '-' + to);
+  currentState = to;
+  highlightState(to);
+  addLog(`<span class="log-arrow">→</span> <b>${label}</b>: ${from} → <b>${to}</b>`, 'success');
+  updateButtons();
+  return true;
+}
+
+function updateButtons() {
+  const btns = {
+    'btn-admit':    ['new','ready'],
+    'btn-dispatch': ['ready','running'],
+    'btn-preempt':  ['running','ready'],
+    'btn-iowait':   ['running','waiting'],
+    'btn-iodone':   ['waiting','ready'],
+    'btn-exit':     ['running','terminated']
+  };
+  for (const [id, [from]] of Object.entries(btns)) {
+    const btn = document.getElementById(id);
+    btn.disabled = currentState !== from;
+  }
+}
+
+function selectState(state) {
+  const names = { new:'New', ready:'Ready', running:'Running', waiting:'Waiting', terminated:'Terminated' };
+  const descs = {
+    new: 'A new process has just been created. It has a PCB allocated but has not yet been admitted to the ready queue.',
+    ready: 'The process is loaded in memory and waiting in the ready queue for the CPU scheduler to dispatch it.',
+    running: 'The process currently holds the CPU and is actively executing instructions.',
+    waiting: 'The process is waiting for an I/O event or resource. It cannot run until the event completes.',
+    terminated: 'The process has finished execution. Its PCB is deallocated and resources are freed.'
+  };
+  addLog(`ℹ <b>${names[state]}</b>: ${descs[state]}`, 'info');
+}
+
+function toggleAutoSim() {
+  if (autoSimRunning) {
+    stopAutoSim();
+  } else {
+    startAutoSim();
+  }
+}
+
+function startAutoSim() {
+  resetAll(false);
+  autoSimRunning = true;
+  autoSimStep = 0;
+  document.getElementById('auto-btn').classList.add('running');
+  document.getElementById('auto-icon').textContent = '■';
+  document.getElementById('auto-label').textContent = 'Stop Simulation';
+  addLog('▶ Auto simulation started', 'info');
+  runNextStep();
+}
+
+function runNextStep() {
+  if (!autoSimRunning) return;
+  if (autoSimStep >= autoSimPaths.length) {
+    stopAutoSim();
+    addLog('✓ Simulation complete!', 'success');
+    if (voiceEnabled) speak("The simulation is complete. The process has successfully traveled through all five states. From New, to Ready, to Running, then to Waiting, back to Ready, Running again, preempted back to Ready, Running one final time, and finally Terminated. This is the complete lifecycle of a process in an operating system. Thank you for watching.");
+    return;
+  }
+  const [from, to, label] = autoSimPaths[autoSimStep];
+  const key = from + '-' + to;
+  // Do the visual transition first
+  _origDoTransition(from, to, label);
+  currentState = to;
+  updateButtons();
+
+  autoSimStep++;
+
+  if (voiceEnabled) {
+    const transText = voiceScripts.transition[key] || '';
+    const stateText = voiceScripts.state[to] || '';
+    const fullText = transText + ' ' + stateText;
+    // After speech finishes, wait a beat then go to next step
+    speak(fullText, () => {
+      if (!autoSimRunning) return;
+      setTimeout(runNextStep, 600);
+    });
+  } else {
+    autoSimTimer = setTimeout(runNextStep, simSpeed);
+  }
+}
+
+// Patch doTransition to also speak (for manual button clicks)
+const _origDoTransition = doTransition;
+window.doTransition = function(from, to, label) {
+  if (currentState !== from) {
+    addLog(`✗ Cannot "${label}" from <b>${currentState}</b>`, 'error');
+    return false;
+  }
+  animateArrow(from + '-' + to);
+  currentState = to;
+  highlightState(to);
+  addLog(`<span class="log-arrow">→</span> <b>${label}</b>: ${from} → <b>${to}</b>`, 'success');
+  updateButtons();
+  if (voiceEnabled) {
+    const key = from + '-' + to;
+    const transText = voiceScripts.transition[key] || '';
+    const stateText = voiceScripts.state[to] || '';
+    speak(transText + ' ' + stateText);
+  }
+  return true;
+};
+
+function stopAutoSim() {
+  autoSimRunning = false;
+  clearTimeout(autoSimTimer);
+  document.getElementById('auto-btn').classList.remove('running');
+  document.getElementById('auto-icon').textContent = '▶';
+  document.getElementById('auto-label').textContent = 'Start Simulation';
+}
+
+function resetAll(log=true) {
+  stopAutoSim();
+  currentState = 'new';
+  highlightState('new');
+  document.querySelectorAll('.flow-arrow').forEach(a => {
+    a.style.stroke = '';
+    a.style.opacity = '0.7';
+    a.classList.remove('active');
+  });
+  updateButtons();
+  if (log) {
+    document.getElementById('event-log').innerHTML = '';
+    addLog('↺ Reset — process back to <b>New</b>', 'info');
+  }
+}
+
+// ===== VOICE NARRATION =====
+let voiceEnabled = false;
+let currentUtterance = null;
+
+const voiceScripts = {
+  state: {
+    new: `We are now in the NEW state. 
+    
+    When you open any application on your computer — let's say you double-click Chrome — the operating system immediately starts creating a brand new process for it. This creation phase is called the New state.
+    
+    Here is exactly what happens behind the scenes. The operating system allocates a special data structure called a Process Control Block, or PCB. Think of the PCB like an identity card for the process. It stores the process ID, the program counter which tells the CPU where to start executing, the values of all CPU registers, memory limits, open file information, and the current state of the process.
+    
+    At this point, the process exists on paper — it has been registered with the OS — but it has NOT yet been given permission to compete for the CPU. The long-term scheduler, also called the job scheduler, is the one who decides when to move this process forward.
+    
+    The reason for this New state is resource management. If the operating system admitted every process immediately, it would overload the memory and CPU very quickly. So the New state acts as a controlled entry gate.`,
+
+    ready: `The process has now entered the READY state. 
+    
+    This is one of the most important states to understand. The process is now fully loaded into main memory, it has all the resources it needs — except one. It does not yet have the CPU. So it waits in line.
+    
+    Imagine a queue at a billing counter. Multiple customers are ready with their items, but only one counter is open. The process is exactly like a customer standing in that queue, fully prepared, just waiting for its turn.
+    
+    In operating systems, this queue is called the Ready Queue. Multiple processes can be in the Ready state at the same time. The short-term scheduler, also known as the CPU scheduler, is the component responsible for picking which process in this queue gets the CPU next.
+    
+    Different scheduling algorithms decide the order — for example, First Come First Serve gives priority to whoever arrived first. Round Robin gives each process a fixed time slice. Priority Scheduling picks the process with the highest priority.
+    
+    The process stays here patiently, consuming zero CPU time, until the scheduler dispatches it.`,
+
+    running: `Excellent! The process is now in the RUNNING state. 
+    
+    This is the most active state in the entire lifecycle. The CPU scheduler has picked this process from the ready queue and assigned it directly to the processor. The CPU is now fetching instructions from this process, decoding them, and executing them one by one.
+    
+    Think of it like this — the process has finally reached the billing counter. The cashier — which is the CPU — is now fully focused on serving this one customer.
+    
+    In a single-core processor system, only ONE process can be in the Running state at any given moment. This is a fundamental rule. The CPU can only do one thing at a time on a single core.
+    
+    Now, there are three things that can happen from this state. First, the process might finish its work and exit — moving to Terminated. Second, it might need to wait for something like disk input or output, so it moves to the Waiting state. Third, its time slice might expire and the OS forcibly takes the CPU away — this is called preemption — and the process goes back to the Ready state.
+    
+    The running state is where the actual work gets done.`,
+
+    waiting: `The process has entered the WAITING state, also called the BLOCKED state. 
+    
+    Here is what happened. While the process was running on the CPU, it made a request that the CPU alone cannot fulfill. For example, it asked to read data from the hard disk, or it's waiting for a network packet to arrive, or it's waiting for the user to press a key on the keyboard.
+    
+    All of these are Input Output operations, and they are thousands of times slower than the CPU. It would be extremely wasteful to keep the CPU sitting idle while waiting for the disk to respond. So the operating system does something smart — it moves this process out of the CPU and into the Waiting state.
+    
+    Think of it like a customer at a restaurant who has placed an order. They step aside and wait at a separate table while the kitchen prepares the food. This way, the waiter — the CPU — is free to take orders from other customers.
+    
+    The process stays in the Waiting state until the I/O operation completes. When it does, a hardware interrupt is sent to the CPU. The OS catches this interrupt and moves the process back to the Ready queue. Notice — it does NOT go directly back to Running. It must wait in line again for the CPU.`,
+
+    terminated: `The process has now reached the TERMINATED state. This is the final state in the process lifecycle. 
+    
+    The process has completed all of its instructions successfully. Or, it may have been forcibly killed by the operating system due to an error, such as a segmentation fault, division by zero, or an illegal memory access. Either way, the process is done.
+    
+    Now the operating system performs a very important cleanup operation. It deallocates all the memory that was assigned to the process. It closes any open files or network connections. It releases any locks or semaphores the process was holding. And finally, it removes the Process Control Block from memory.
+    
+    Think of this like checking out of a hotel. You hand over the room key, the hotel staff cleans the room and makes it available for the next guest. The operating system does exactly this — it reclaims all resources so they can be used by future processes.
+    
+    After termination, the process no longer exists in the system. Its journey through all five states is complete — from New, to Ready, to Running, possibly through Waiting, and finally to Terminated.`
+  },
+
+  transition: {
+    'new-ready': `Transition: NEW to READY — this is called Admission. 
+    
+    The long-term scheduler has decided that the system has enough free memory and resources to admit this process into active competition for the CPU. The process is now loaded from secondary storage into main memory and placed into the Ready Queue. This transition is the green light that says — you are officially in the race now.`,
+
+    'ready-running': `Transition: READY to RUNNING — this is called Dispatch or Scheduling. 
+    
+    The short-term CPU scheduler has selected this process from the ready queue based on its scheduling algorithm. The process is assigned to the CPU, the OS restores the CPU registers from the process's PCB, sets the program counter to where the process left off, and the CPU begins executing instructions. This is the moment the process goes from waiting to actually doing real work.`,
+
+    'running-ready': `Transition: RUNNING to READY — this is called Preemption. 
+    
+    The process was running fine, but its allocated time slice has expired. In a preemptive scheduling system, the OS sets a timer. When the timer fires, it generates an interrupt. The OS saves the process's current state — all register values and the program counter — into its PCB. It then moves the process back to the ready queue so another process gets a fair turn. The process has not finished — it will run again when the scheduler picks it.`,
+
+    'running-waiting': `Transition: RUNNING to WAITING — this is called Blocking or I/O Wait. 
+    
+    The process issued a system call requesting an I/O operation — for example, reading a file from disk. Since disk access takes millions of CPU cycles to complete, it makes no sense to waste the CPU waiting. The OS saves the process state into the PCB, moves it to the waiting queue, and immediately dispatches another ready process to the CPU. This overlap of I/O and CPU work is what makes modern operating systems efficient.`,
+
+    'waiting-ready': `Transition: WAITING to READY — this is called I/O Completion or Wakeup. 
+    
+    The I/O device has finished its work. It sends a hardware interrupt to the CPU. The interrupt handler in the OS identifies which process was waiting for this event, removes it from the waiting queue, and places it back into the ready queue. The process is now eligible to run again. But remember — it does not jump straight to Running. It must wait its turn in the ready queue just like everyone else.`,
+
+    'running-terminated': `Transition: RUNNING to TERMINATED — this is called Exit. 
+    
+    The process has executed its final instruction. In C programming, this is when the main function returns or when exit() is called. The process signals the OS that it is done. The OS then performs a full cleanup — it frees heap memory, closes file descriptors, releases I/O devices, removes the PCB, and notifies the parent process if it is waiting using a wait() system call. The process is permanently removed from the system.`
+  },
+
+  intro: `Welcome to the Operating System Process State Diagram — an interactive educational simulation.
+
+In this visualization, you will learn how a process moves through its entire lifecycle inside an operating system. Every program you run on your computer — whether it is a browser, a game, or a music player — is a process. And every process goes through exactly these five states.
+
+The five states are: NEW, where the process is just being created. READY, where the process is waiting for its turn to use the CPU. RUNNING, where the process is actively executing on the processor. WAITING, where the process is blocked waiting for input or output. And TERMINATED, where the process has finished and its resources are freed.
+
+You can click any state on the diagram to learn about it in detail. You can use the transition buttons to manually move the process from one state to another. Or you can press Start Simulation to watch the entire lifecycle play out automatically with a full narration at each step.
+
+Let us begin. The process starts in the NEW state.`
+};
+
+function toggleVoice() {
+  voiceEnabled = !voiceEnabled;
+  const wrap = document.getElementById('voice-toggle-wrap');
+  const thumb = document.getElementById('voice-thumb');
+  if (voiceEnabled) {
+    wrap.style.background = 'rgba(79,127,255,0.3)';
+    wrap.style.borderColor = 'var(--accent)';
+    thumb.style.transform = 'translateX(16px)';
+    thumb.style.background = 'var(--accent)';
+    document.getElementById('voice-text').textContent = 'Voice enabled — narrating transitions.';
+    speak(voiceScripts.intro);
+  } else {
+    wrap.style.background = 'var(--bg3)';
+    wrap.style.borderColor = 'var(--border2)';
+    thumb.style.transform = 'translateX(0)';
+    thumb.style.background = 'var(--muted)';
+    stopVoice();
+    document.getElementById('voice-text').textContent = 'Voice disabled.';
+  }
+}
+
+function speak(text, onDone) {
+  if (!voiceEnabled || !window.speechSynthesis) { if(onDone) onDone(); return; }
+  window.speechSynthesis.cancel();
+  // Clean up whitespace/newlines for speech
+  const cleanText = text.replace(/\n/g,' ').replace(/\s+/g,' ').trim();
+  const utter = new SpeechSynthesisUtterance(cleanText);
+  utter.rate = parseFloat(document.getElementById('voice-rate').value);
+  utter.pitch = parseFloat(document.getElementById('voice-pitch').value);
+  const voices = window.speechSynthesis.getVoices();
+  const preferred = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Premium')))
+    || voices.find(v => v.lang === 'en-US')
+    || voices.find(v => v.lang.startsWith('en'))
+    || voices[0];
+  if (preferred) utter.voice = preferred;
+
+  const bars = document.querySelectorAll('.wave-bar');
+  const caption = document.getElementById('voice-caption');
+
+  utter.onstart = () => {
+    bars.forEach(b => b.classList.add('speaking'));
+    document.getElementById('voice-text').textContent = 'Speaking…';
+  };
+
+  // Update caption word by word using boundary events
+  utter.onboundary = (e) => {
+    if (e.name === 'word') {
+      const snippet = cleanText.substring(e.charIndex, e.charIndex + 60);
+      if (caption) caption.textContent = snippet + (snippet.length >= 60 ? '…' : '');
+    }
+  };
+
+  utter.onend = () => {
+    bars.forEach(b => b.classList.remove('speaking'));
+    document.getElementById('voice-text').textContent = 'Done speaking.';
+    if (caption) caption.textContent = '';
+    if (onDone) onDone();
+  };
+  utter.onerror = () => {
+    bars.forEach(b => b.classList.remove('speaking'));
+    document.getElementById('voice-text').textContent = 'Voice error — try Chrome or Edge.';
+    if (onDone) onDone();
+  };
+  currentUtterance = utter;
+  window.speechSynthesis.speak(utter);
+}
+
+function stopVoice() {
+  window.speechSynthesis && window.speechSynthesis.cancel();
+  document.querySelectorAll('.wave-bar').forEach(b => b.classList.remove('speaking'));
+  document.getElementById('voice-text').textContent = 'Stopped.';
+}
+
+// Sliders
+document.getElementById('voice-rate').oninput = function() {
+  document.getElementById('rate-val').textContent = parseFloat(this.value).toFixed(2);
+};
+document.getElementById('voice-pitch').oninput = function() {
+  document.getElementById('pitch-val').textContent = parseFloat(this.value).toFixed(1);
+};
+
+// Patch selectState to also speak
+const _origSelectState = selectState;
+window.selectState = function(state) {
+  _origSelectState(state);
+  if (voiceEnabled) {
+    speak(voiceScripts.state[state]);
+  }
+};
+
+// Load voices (Chrome needs this)
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
+</script>
+</body>
+</html>
